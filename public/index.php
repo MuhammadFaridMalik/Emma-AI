@@ -1,6 +1,6 @@
 <?php
 // EMMA AI - Entry Point
-// Phase 1: Virtual Device UI only. Tidak ada logic backend di sini.
+// Phase 1-2: Virtual Device UI + Virtual Hardware. Tidak ada logic backend di sini.
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -63,9 +63,42 @@
 
     </div>
 
+    <section class="status-panel" id="statusPanel">
+        <div class="status-panel__row">
+            <span class="status-panel__label">Power</span>
+            <span class="status-panel__value" id="statPower">ON</span>
+        </div>
+        <div class="status-panel__row">
+            <span class="status-panel__label">Battery</span>
+            <span class="status-panel__value" id="statBattery">82%</span>
+        </div>
+        <div class="status-panel__row status-panel__row--bar">
+            <div class="battery-bar"><div class="battery-bar__fill" id="batteryFill"></div></div>
+        </div>
+        <div class="status-panel__row">
+            <span class="status-panel__label">WiFi</span>
+            <span class="status-panel__value" id="statWifi">Connected · Good</span>
+        </div>
+        <div class="status-panel__row">
+            <span class="status-panel__label">Volume</span>
+            <span class="status-panel__value" id="statVolume">60%</span>
+        </div>
+        <div class="status-panel__row">
+            <span class="status-panel__label">Speaker</span>
+            <span class="status-panel__value" id="statSpeaker">ON</span>
+        </div>
+        <div class="status-panel__row">
+            <span class="status-panel__label">LED</span>
+            <span class="status-panel__value" id="statLed">ON</span>
+        </div>
+    </section>
+
     <section class="devtools" id="devtools">
-        <p class="devtools__label">Uji Coba State (sementara, untuk testing Phase 1)</p>
+        <p class="devtools__label">Uji Coba Ekspresi (sementara, untuk testing)</p>
         <div class="devtools__buttons" id="stateSwitcher"></div>
+
+        <p class="devtools__label devtools__label--spaced">Uji Coba Hardware (sementara, untuk testing Phase 2)</p>
+        <div class="devtools__buttons" id="hardwareSwitcher"></div>
     </section>
 
 </main>
