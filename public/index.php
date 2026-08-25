@@ -143,10 +143,14 @@
 
         <p class="devtools__label devtools__label--spaced">Uji Coba Sensor (sementara, untuk testing Phase 3)</p>
         <div class="devtools__buttons" id="sensorSwitcher"></div>
+
+        <p class="devtools__label devtools__label--spaced">Uji Coba Command Engine — kirim ke chat (Phase 5)</p>
+        <div class="devtools__buttons" id="commandSwitcher"></div>
     </section>
 
 </main>
 
+<script src="assets/js/command-detector.js"></script>
 <script src="assets/js/chat.js"></script>
 <script src="assets/js/app.js"></script>
 </body>

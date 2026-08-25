@@ -1,7 +1,7 @@
 /* =========================================================
    EMMA AI — Chat Interface
-   Phase 4: Chat UI + koneksi ke backend AI (public/api/chat.php).
-   TIDAK ADA API key di file ini - permintaan selalu lewat backend.
+   Phase 5: Chat UI + Command Detection (sebelum ke AI) + koneksi AI.
+   TIDAK ADA API key di file ini - permintaan AI selalu lewat backend.
    ========================================================= */
 
 (function () {
@@ -13,7 +13,7 @@
     var sendBtn = document.getElementById("chatSend");
     var errorEl = document.getElementById("chatError");
 
-    var conversation = []; // { role: "user"|"assistant", content: string }
+    var conversation = [];
     var isLoading = false;
 
     function scrollToBottom() {
@@ -77,7 +77,38 @@
         return true;
     }
 
-    function sendMessage(text) {
+    function runDetectedCommand(text, detected) {
+        if (detected.requiresPower && !isDevicePoweredOn()) {
+            showError("Device sedang mati. Nyalakan device dulu (bilang \"nyalakan device\") sebelum perintah itu.");
+            return;
+        }
+
+        clearError();
+        addBubble("user", text);
+        conversation.push({ role: "user", content: text });
+
+        setLoading(true);
+        callEmma("expression.set", { name: "thinking" });
+        addTypingIndicator();
+
+        setTimeout(function () {
+            var reply = detected.run();
+
+            removeTypingIndicator();
+            callEmma("expression.set", { name: "speaking" });
+            addBubble("assistant", reply);
+            conversation.push({ role: "assistant", content: reply });
+
+            setLoading(false);
+            inputEl.focus();
+
+            setTimeout(function () {
+                callEmma("expression.set", { name: "idle" });
+            }, speakingDuration(reply));
+        }, 500);
+    }
+
+    function sendToAI(text) {
         clearError();
         addBubble("user", text);
         conversation.push({ role: "user", content: text });
@@ -135,18 +166,61 @@
         var text = inputEl.value.trim();
         if (text === "") return;
 
+        var detected = window.EmmaCommandDetector ? window.EmmaCommandDetector.detect(text) : null;
+
+        if (detected) {
+            inputEl.value = "";
+            runDetectedCommand(text, detected);
+            return;
+        }
+
         if (!isDevicePoweredOn()) {
             showError("Device sedang mati. Nyalakan device terlebih dahulu untuk chat dengan EMMA.");
             return;
         }
 
         inputEl.value = "";
-        sendMessage(text);
+        sendToAI(text);
+    }
+
+    function submitText(text) {
+        inputEl.value = text;
+        if (typeof formEl.requestSubmit === "function") {
+            formEl.requestSubmit();
+        } else {
+            handleSubmit({ preventDefault: function () {} });
+        }
+    }
+
+    function buildCommandSwitcher() {
+        var container = document.getElementById("commandSwitcher");
+        if (!container) return;
+
+        var phrases = [
+            "nyalakan lampu",
+            "matikan lampu",
+            "besarkan volume",
+            "kecilkan volume",
+            "cek baterai",
+            "cek suhu",
+            "cek status device",
+            "matikan device",
+            "nyalakan device"
+        ];
+
+        phrases.forEach(function (phrase) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = phrase;
+            btn.addEventListener("click", function () { submitText(phrase); });
+            container.appendChild(btn);
+        });
     }
 
     function init() {
         if (!formEl) return;
         formEl.addEventListener("submit", handleSubmit);
+        buildCommandSwitcher();
         addBubble("assistant", "Hai! Aku EMMA. Ada yang bisa aku bantu? \uD83D\uDE0A");
     }
 

@@ -1,7 +1,7 @@
 /* =========================================================
    EMMA AI — Virtual Device
-   Phase 3: Device State lengkap + Virtual Sensor + command layer.
-   Belum ada AI/backend/database di sini.
+   Phase 5: Device State + Sensor + Command Processor
+   (dipakai oleh Command Engine EMMA lewat window.EMMA.executeCommand).
    ========================================================= */
 
 (function () {
@@ -11,10 +11,6 @@
         "idle", "listening", "thinking", "speaking", "happy", "error", "sleeping"
     ];
 
-    /**
-     * Device State terpusat — satu-satunya sumber kebenaran.
-     * Semua komponen visual WAJIB membaca dari sini lewat render().
-     */
     var deviceState = {
         power: true,
         battery: 82,
@@ -29,7 +25,8 @@
         sound: 42,
         motion: false,
         screen: true,
-        expression: "idle"
+        expression: "idle",
+        ledOverride: null
     };
 
     var assistantTimer = null;
@@ -99,7 +96,9 @@
         statMotion.textContent = deviceState.motion ? "Detected" : "Not detected";
         statMotion.classList.toggle("status-panel__value--alert", deviceState.motion);
 
-        deviceState.led = deviceState.power && expression !== "sleeping";
+        var autoLed = deviceState.power && expression !== "sleeping";
+        var effectiveLed = deviceState.ledOverride === null ? autoLed : deviceState.ledOverride;
+        deviceState.led = deviceState.power && effectiveLed;
         statLed.textContent = deviceState.led ? "ON" : "OFF";
         ledEl.classList.toggle("led--off", !deviceState.led);
 
@@ -109,10 +108,6 @@
 
         statusPanelEl.classList.toggle("status-panel--off", !deviceState.power);
     }
-
-    // ---------------------------------------------------------
-    // Fungsi-fungsi yang MENGUBAH state (tidak menyentuh DOM langsung)
-    // ---------------------------------------------------------
 
     function setExpression(name) {
         if (EMMA_EXPRESSIONS.indexOf(name) === -1) {
@@ -124,10 +119,23 @@
         render();
     }
 
-    function togglePower() {
-        deviceState.power = !deviceState.power;
+    function setPower(on) {
+        deviceState.power = !!on;
         clearTimeout(assistantTimer);
-        if (deviceState.power) deviceState.expression = "idle";
+        if (deviceState.power) {
+            deviceState.expression = "idle";
+            deviceState.ledOverride = null;
+        }
+        render();
+    }
+
+    function togglePower() {
+        setPower(!deviceState.power);
+    }
+
+    function setLed(on) {
+        if (!deviceState.power) return;
+        deviceState.ledOverride = !!on;
         render();
     }
 
@@ -201,14 +209,12 @@
         render();
     }
 
-    // ---------------------------------------------------------
-    // COMMAND LAYER (disiapkan untuk Phase 5 - Command/AI Engine)
-    // executeCommand() adalah satu-satunya pintu masuk untuk menjalankan
-    // aksi terhadap device.
-    // ---------------------------------------------------------
-
     var commandRegistry = {
         "power.toggle": togglePower,
+        "power.on": function () { setPower(true); },
+        "power.off": function () { setPower(false); },
+        "led.on": function () { setLed(true); },
+        "led.off": function () { setLed(false); },
         "assistant.trigger": runAssistantDemo,
         "volume.up": function () { adjustVolume(10); },
         "volume.down": function () { adjustVolume(-10); },
@@ -232,10 +238,6 @@
         handler(payload);
         return true;
     }
-
-    // ---------------------------------------------------------
-    // Wiring UI
-    // ---------------------------------------------------------
 
     function handleControlClick(event) {
         var action = event.currentTarget.getAttribute("data-action");
