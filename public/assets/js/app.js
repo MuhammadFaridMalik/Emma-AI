@@ -1,6 +1,6 @@
 /* =========================================================
    EMMA AI — Virtual Device
-   Phase 2: Virtual Hardware + Device State terpusat.
+   Phase 3: Device State lengkap + Virtual Sensor + command layer.
    Belum ada AI/backend/database di sini.
    ========================================================= */
 
@@ -12,23 +12,29 @@
     ];
 
     /**
-     * Device State terpusat.
-     * Semua komponen visual (LED, battery bar, wifi, volume, speaker)
-     * WAJIB membaca dari objek ini lewat render(), bukan diubah langsung di DOM.
+     * Device State terpusat — satu-satunya sumber kebenaran.
+     * Semua komponen visual WAJIB membaca dari sini lewat render().
      */
     var deviceState = {
         power: true,
         battery: 82,
         wifi: true,
-        wifiSignal: "good", // "excellent" | "good" | "weak"
+        wifiSignal: "good",
         volume: 60,
         led: false,
-        speaker: true
+        speaker: true,
+        microphone: true,
+        temperature: 29.4,
+        light: 65,
+        sound: 42,
+        motion: false,
+        screen: true,
+        expression: "idle"
     };
 
-    var currentExpression = "idle";
     var assistantTimer = null;
     var batteryTimer = null;
+    var sensorTimer = null;
 
     var deviceEl = document.getElementById("device");
     var stateLabelEl = document.getElementById("stateLabel");
@@ -38,12 +44,22 @@
     var statBattery = document.getElementById("statBattery");
     var batteryFill = document.getElementById("batteryFill");
     var statWifi = document.getElementById("statWifi");
+    var statTemperature = document.getElementById("statTemperature");
+    var statLight = document.getElementById("statLight");
+    var statSound = document.getElementById("statSound");
+    var statMotion = document.getElementById("statMotion");
     var statVolume = document.getElementById("statVolume");
     var statSpeaker = document.getElementById("statSpeaker");
+    var statMicrophone = document.getElementById("statMicrophone");
     var statLed = document.getElementById("statLed");
 
     function clamp(n, min, max) {
         return Math.max(min, Math.min(max, n));
+    }
+
+    function randomWalk(value, min, max, step) {
+        var delta = (Math.random() * 2 - 1) * step;
+        return clamp(value + delta, min, max);
     }
 
     function batteryTier(v) {
@@ -62,12 +78,13 @@
     }
 
     function render() {
-        var expression = deviceState.power ? currentExpression : "powered_off";
+        deviceState.screen = deviceState.power;
+        var expression = deviceState.power ? deviceState.expression : "powered_off";
+
         deviceEl.setAttribute("data-state", expression);
         stateLabelEl.textContent = expression.replace("_", " ").toUpperCase();
 
         statPower.textContent = deviceState.power ? "ON" : "OFF";
-
         statBattery.textContent = deviceState.battery + "% (" + batteryTier(deviceState.battery) + ")";
         batteryFill.style.width = deviceState.battery + "%";
         batteryFill.classList.toggle("battery-bar__fill--low", deviceState.battery <= 20);
@@ -76,16 +93,26 @@
             ? "Connected · " + signalLabel(deviceState.wifiSignal)
             : "Disconnected";
 
-        statVolume.textContent = deviceState.volume + "%";
-
-        statSpeaker.textContent = deviceState.speaker ? "ON" : "OFF";
+        statTemperature.textContent = deviceState.temperature.toFixed(1) + "°C";
+        statLight.textContent = Math.round(deviceState.light) + "%";
+        statSound.textContent = Math.round(deviceState.sound) + " dB";
+        statMotion.textContent = deviceState.motion ? "Detected" : "Not detected";
+        statMotion.classList.toggle("status-panel__value--alert", deviceState.motion);
 
         deviceState.led = deviceState.power && expression !== "sleeping";
         statLed.textContent = deviceState.led ? "ON" : "OFF";
         ledEl.classList.toggle("led--off", !deviceState.led);
 
+        statSpeaker.textContent = deviceState.speaker ? "ON" : "OFF";
+        statMicrophone.textContent = deviceState.microphone ? "ON" : "OFF";
+        statVolume.textContent = deviceState.volume + "%";
+
         statusPanelEl.classList.toggle("status-panel--off", !deviceState.power);
     }
+
+    // ---------------------------------------------------------
+    // Fungsi-fungsi yang MENGUBAH state (tidak menyentuh DOM langsung)
+    // ---------------------------------------------------------
 
     function setExpression(name) {
         if (EMMA_EXPRESSIONS.indexOf(name) === -1) {
@@ -93,19 +120,26 @@
             return;
         }
         if (!deviceState.power) return;
-        currentExpression = name;
+        deviceState.expression = name;
         render();
     }
 
     function togglePower() {
         deviceState.power = !deviceState.power;
         clearTimeout(assistantTimer);
-        if (deviceState.power) currentExpression = "idle";
+        if (deviceState.power) deviceState.expression = "idle";
         render();
     }
 
     function runAssistantDemo() {
         if (!deviceState.power) return;
+
+        if (!deviceState.microphone) {
+            setExpression("error");
+            assistantTimer = setTimeout(function () { setExpression("idle"); }, 1200);
+            return;
+        }
+
         clearTimeout(assistantTimer);
         setExpression("listening");
 
@@ -130,10 +164,7 @@
         render();
     }
 
-    function toggleWifi() {
-        deviceState.wifi = !deviceState.wifi;
-        render();
-    }
+    function toggleWifi() { deviceState.wifi = !deviceState.wifi; render(); }
 
     function cycleSignal() {
         var order = ["weak", "good", "excellent"];
@@ -142,37 +173,77 @@
         render();
     }
 
-    function toggleSpeaker() {
-        deviceState.speaker = !deviceState.speaker;
-        render();
-    }
+    function toggleSpeaker() { deviceState.speaker = !deviceState.speaker; render(); }
+    function toggleMicrophone() { deviceState.microphone = !deviceState.microphone; render(); }
 
     function drainBattery(amount) {
         deviceState.battery = clamp(deviceState.battery - amount, 0, 100);
         if (deviceState.battery === 0 && deviceState.power) {
-            currentExpression = "sleeping";
+            deviceState.expression = "sleeping";
         }
         render();
     }
 
-    function chargeBattery() {
-        deviceState.battery = 100;
+    function chargeBattery() { deviceState.battery = 100; render(); }
+
+    function forceMotionPulse() {
+        deviceState.motion = true;
+        render();
+        setTimeout(function () { deviceState.motion = false; render(); }, 3000);
+    }
+
+    function tickSensors() {
+        if (!deviceState.power) return;
+        deviceState.temperature = randomWalk(deviceState.temperature, 22, 33, 0.4);
+        deviceState.light = randomWalk(deviceState.light, 5, 100, 6);
+        deviceState.sound = randomWalk(deviceState.sound, 25, 75, 5);
+        deviceState.motion = Math.random() < 0.2;
         render();
     }
+
+    // ---------------------------------------------------------
+    // COMMAND LAYER (disiapkan untuk Phase 5 - Command/AI Engine)
+    // executeCommand() adalah satu-satunya pintu masuk untuk menjalankan
+    // aksi terhadap device.
+    // ---------------------------------------------------------
+
+    var commandRegistry = {
+        "power.toggle": togglePower,
+        "assistant.trigger": runAssistantDemo,
+        "volume.up": function () { adjustVolume(10); },
+        "volume.down": function () { adjustVolume(-10); },
+        "wifi.toggle": toggleWifi,
+        "wifi.cycleSignal": cycleSignal,
+        "speaker.toggle": toggleSpeaker,
+        "microphone.toggle": toggleMicrophone,
+        "battery.drain": function (payload) { drainBattery((payload && payload.amount) || 10); },
+        "battery.charge": chargeBattery,
+        "sensor.tick": tickSensors,
+        "sensor.motionPulse": forceMotionPulse,
+        "expression.set": function (payload) { setExpression(payload && payload.name); }
+    };
+
+    function executeCommand(commandName, payload) {
+        var handler = commandRegistry[commandName];
+        if (!handler) {
+            console.warn("[EMMA] Command tidak dikenal:", commandName);
+            return false;
+        }
+        handler(payload);
+        return true;
+    }
+
+    // ---------------------------------------------------------
+    // Wiring UI
+    // ---------------------------------------------------------
 
     function handleControlClick(event) {
         var action = event.currentTarget.getAttribute("data-action");
-
-        if (action === "power") {
-            togglePower();
-            return;
-        }
-
+        if (action === "power") { executeCommand("power.toggle"); return; }
         if (!deviceState.power) return;
-
-        if (action === "assistant") runAssistantDemo();
-        if (action === "vol-up") adjustVolume(10);
-        if (action === "vol-down") adjustVolume(-10);
+        if (action === "assistant") executeCommand("assistant.trigger");
+        if (action === "vol-up") executeCommand("volume.up");
+        if (action === "vol-down") executeCommand("volume.down");
     }
 
     function buildExpressionSwitcher() {
@@ -181,7 +252,9 @@
             var btn = document.createElement("button");
             btn.type = "button";
             btn.textContent = name;
-            btn.addEventListener("click", function () { setExpression(name); });
+            btn.addEventListener("click", function () {
+                executeCommand("expression.set", { name: name });
+            });
             container.appendChild(btn);
         });
     }
@@ -189,27 +262,45 @@
     function buildHardwareSwitcher() {
         var container = document.getElementById("hardwareSwitcher");
         var actions = [
-            { label: "wifi toggle", fn: toggleWifi },
-            { label: "signal cycle", fn: cycleSignal },
-            { label: "speaker toggle", fn: toggleSpeaker },
-            { label: "battery -10%", fn: function () { drainBattery(10); } },
-            { label: "battery full", fn: chargeBattery }
+            { label: "wifi toggle", command: "wifi.toggle" },
+            { label: "signal cycle", command: "wifi.cycleSignal" },
+            { label: "speaker toggle", command: "speaker.toggle" },
+            { label: "battery -10%", command: "battery.drain", payload: { amount: 10 } },
+            { label: "battery full", command: "battery.charge" }
         ];
         actions.forEach(function (a) {
             var btn = document.createElement("button");
             btn.type = "button";
             btn.textContent = a.label;
-            btn.addEventListener("click", a.fn);
+            btn.addEventListener("click", function () { executeCommand(a.command, a.payload); });
+            container.appendChild(btn);
+        });
+    }
+
+    function buildSensorSwitcher() {
+        var container = document.getElementById("sensorSwitcher");
+        var actions = [
+            { label: "sensor tick", command: "sensor.tick" },
+            { label: "motion pulse", command: "sensor.motionPulse" },
+            { label: "microphone toggle", command: "microphone.toggle" }
+        ];
+        actions.forEach(function (a) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = a.label;
+            btn.addEventListener("click", function () { executeCommand(a.command); });
             container.appendChild(btn);
         });
     }
 
     function startBatterySimulation() {
         batteryTimer = setInterval(function () {
-            if (deviceState.power && deviceState.battery > 0) {
-                drainBattery(1);
-            }
+            if (deviceState.power && deviceState.battery > 0) drainBattery(1);
         }, 20000);
+    }
+
+    function startSensorSimulation() {
+        sensorTimer = setInterval(tickSensors, 4000);
     }
 
     function init() {
@@ -218,9 +309,16 @@
         });
         buildExpressionSwitcher();
         buildHardwareSwitcher();
+        buildSensorSwitcher();
         render();
         startBatterySimulation();
+        startSensorSimulation();
     }
 
     document.addEventListener("DOMContentLoaded", init);
+
+    window.EMMA = {
+        getState: function () { return deviceState; },
+        executeCommand: executeCommand
+    };
 })();

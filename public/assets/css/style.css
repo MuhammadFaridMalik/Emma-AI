@@ -442,6 +442,16 @@ html, body {
 
 .status-panel__row--bar { padding: 2px 0 4px; }
 
+.status-panel__divider {
+    height: 1px;
+    background: var(--chassis-edge);
+    margin: 2px 0;
+}
+
+.status-panel__value--alert {
+    color: var(--think);
+}
+
 .status-panel__label {
     color: var(--text-muted);
     letter-spacing: 0.1em;
