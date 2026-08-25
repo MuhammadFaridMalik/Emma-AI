@@ -63,6 +63,25 @@
 
     </div>
 
+        <section class="chat" id="chat">
+        <div class="chat__header">
+            <span class="chat__title">CHAT — EMMA</span>
+        </div>
+        <div class="chat__history" id="chatHistory"></div>
+        <form class="chat__form" id="chatForm">
+            <input
+                type="text"
+                id="chatInput"
+                class="chat__input"
+                placeholder="Ketik pesan untuk EMMA..."
+                autocomplete="off"
+                maxlength="1000"
+            >
+            <button type="submit" class="chat__send" id="chatSend">Kirim</button>
+        </form>
+        <p class="chat__error" id="chatError" hidden></p>
+    </section>
+
     <section class="status-panel" id="statusPanel">
         <div class="status-panel__row">
             <span class="status-panel__label">Power</span>
@@ -128,6 +147,7 @@
 
 </main>
 
+<script src="assets/js/chat.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>
